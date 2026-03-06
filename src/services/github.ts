@@ -1,22 +1,16 @@
+import { invoke } from "@tauri-apps/api/core";
 import type { ManifestData } from "../types/manifest";
-
-const MANIFEST_URL =
-  "https://raw.githubusercontent.com/ZeElder/zeelauncher-data/refs/heads/main/manifest.json";
-
-async function safeFetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
-    headers: {
-      "Cache-Control": "no-cache",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Erreur HTTP ${response.status} sur ${url}`);
-  }
-
-  return response.json() as Promise<T>;
-}
+import type { PatchNotesData } from "../types/patchnotes";
+import type { NewsData } from "../types/news";
 
 export async function getManifest(): Promise<ManifestData> {
-  return safeFetchJson<ManifestData>(MANIFEST_URL);
+  return invoke<ManifestData>("get_manifest");
+}
+
+export async function getPatchNotes(): Promise<PatchNotesData> {
+  return invoke<PatchNotesData>("get_patch_notes");
+}
+
+export async function getNews(): Promise<NewsData> {
+  return invoke<NewsData>("get_news");
 }

@@ -1,7 +1,27 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { getManifest } from "../../services/github";
+import type { GameManifestItem } from "../../types/manifest";
 
 export default function SideNav() {
-  const linkClass = ({ isActive }: { isActive: boolean }) =>
+  const navigate = useNavigate();
+  const [gamesOpen, setGamesOpen] = useState(true);
+  const [games, setGames] = useState<GameManifestItem[]>([]);
+
+  useEffect(() => {
+    const loadGames = async () => {
+      try {
+        const manifest = await getManifest();
+        setGames(manifest.games);
+      } catch (error) {
+        console.error("Erreur chargement sidebar games:", error);
+      }
+    };
+
+    loadGames();
+  }, []);
+
+  const mainLinkClass = ({ isActive }: { isActive: boolean }) =>
     [
       "group relative rounded-2xl px-4 py-3 text-sm font-medium transition-all duration-200",
       isActive
@@ -28,13 +48,56 @@ export default function SideNav() {
       </div>
 
       <nav className="flex flex-col gap-2">
-        <NavLink to="/" end className={linkClass}>
+        <NavLink to="/" end className={mainLinkClass}>
           Accueil
         </NavLink>
 
-        <NavLink to="/games" className={linkClass}>
-          Les Jeux
-        </NavLink>
+        <div className="overflow-hidden rounded-2xl bg-white/[0.03]">
+          <div className="flex items-center gap-2 p-2">
+            <button
+              onClick={() => navigate("/games")}
+              className="flex-1 rounded-xl px-3 py-2 text-left text-sm font-medium text-white/75 transition hover:bg-white/5 hover:text-white"
+            >
+              Les Jeux
+            </button>
+
+            <button
+              onClick={() => setGamesOpen((prev) => !prev)}
+              aria-label={gamesOpen ? "Replier les jeux" : "Déplier les jeux"}
+              className="flex h-10 w-10 items-center justify-center rounded-xl text-white/55 transition hover:bg-white/5 hover:text-white"
+            >
+              <span
+                className={[
+                  "text-xs transition-transform duration-200",
+                  gamesOpen ? "rotate-180" : "rotate-0",
+                ].join(" ")}
+              >
+                ▼
+              </span>
+            </button>
+          </div>
+
+          {gamesOpen && (
+            <div className="mt-1 flex flex-col gap-1 px-2 pb-2">
+              {games.map((game) => (
+                <NavLink
+                  key={game.id}
+                  to={`/games/${game.id}`}
+                  className={({ isActive }) =>
+                    [
+                      "rounded-xl px-3 py-2 text-sm transition",
+                      isActive
+                        ? "bg-blue-500/15 text-blue-300"
+                        : "text-white/55 hover:bg-white/5 hover:text-white",
+                    ].join(" ")
+                  }
+                >
+                  {game.name}
+                </NavLink>
+              ))}
+            </div>
+          )}
+        </div>
       </nav>
 
       <div className="mt-auto">
