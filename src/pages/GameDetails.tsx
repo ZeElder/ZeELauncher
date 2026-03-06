@@ -1,14 +1,53 @@
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { mockGames } from "../data/mockGames";
+import { getManifest } from "../services/github";
+import type { GameManifestItem } from "../types/manifest";
 
 export default function GameDetails() {
   const { gameId } = useParams();
-  const game = mockGames.find((g) => g.id === gameId);
+  const [game, setGame] = useState<GameManifestItem | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!game) {
+  useEffect(() => {
+    const loadGame = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const manifest = await getManifest();
+        const foundGame = manifest.games.find((g) => g.id === gameId) ?? null;
+
+        if (!foundGame) {
+          setError("Jeu introuvable.");
+          setGame(null);
+          return;
+        }
+
+        setGame(foundGame);
+      } catch (err) {
+        console.error(err);
+        setError("Impossible de charger les données du jeu.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadGame();
+  }, [gameId]);
+
+  if (loading) {
+    return (
+      <div className="rounded-[24px] border border-white/10 bg-white/5 p-6 text-white/70">
+        Chargement du jeu...
+      </div>
+    );
+  }
+
+  if (error || !game) {
     return (
       <div className="rounded-[24px] border border-red-500/20 bg-red-500/10 p-6 text-white">
-        Jeu introuvable.
+        {error ?? "Jeu introuvable."}
       </div>
     );
   }
@@ -30,8 +69,19 @@ export default function GameDetails() {
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-300/70">
               Jeu
             </p>
+
             <h1 className="mt-2 text-4xl font-bold text-white">{game.name}</h1>
+
             <p className="mt-4 text-white/65">{game.description}</p>
+
+            <div className="mt-4 flex flex-wrap gap-3 text-sm text-white/55">
+              <span className="rounded-full bg-white/5 px-3 py-1">
+                Version {game.version}
+              </span>
+              <span className="rounded-full bg-white/5 px-3 py-1">
+                Taille {game.size}
+              </span>
+            </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
               <button className="rounded-2xl bg-green-600 px-5 py-3 font-semibold text-white transition hover:bg-green-500">
@@ -40,10 +90,6 @@ export default function GameDetails() {
 
               <button className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 font-semibold text-white transition hover:bg-white/10">
                 Patch notes
-              </button>
-
-              <button className="rounded-2xl border border-white/10 bg-white/5 px-5 py-3 font-semibold text-white transition hover:bg-white/10">
-                Captures
               </button>
             </div>
           </div>
