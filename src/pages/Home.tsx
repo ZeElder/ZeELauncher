@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { getManifest, getNews, getPatchNotes } from "../services/github";
 import type { ManifestData } from "../types/manifest";
 import type { NewsItem } from "../types/news";
@@ -8,6 +9,7 @@ export default function Home() {
   const [manifest, setManifest] = useState<ManifestData | null>(null);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [patches, setPatches] = useState<PatchNoteItem[]>([]);
+  const [localLauncherVersion, setLocalLauncherVersion] = useState<string>("-");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,14 +19,16 @@ export default function Home() {
         setLoading(true);
         setError(null);
 
-        const [manifestData, newsData, patchData] = await Promise.all([
+        const [manifestData, newsData, patchData, version] = await Promise.all([
           getManifest(),
           getNews(),
           getPatchNotes(),
+          getVersion(),
         ]);
 
         setManifest(manifestData);
         setNews(newsData.news);
+        setLocalLauncherVersion(version);
 
         const sortedPatches = [...patchData.patches].sort((a, b) =>
           b.version.localeCompare(a.version, undefined, { numeric: true })
@@ -43,7 +47,7 @@ export default function Home() {
       }
     };
 
-    loadHome();
+    void loadHome();
   }, []);
 
   const latestGameCount = useMemo(() => manifest?.games.length ?? 0, [manifest]);
@@ -90,7 +94,7 @@ export default function Home() {
                 Version launcher
               </p>
               <p className="mt-1 text-lg font-semibold text-white">
-                {manifest?.launcher.version ?? "-"}
+                {localLauncherVersion}
               </p>
             </div>
 
