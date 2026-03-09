@@ -1,24 +1,43 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { getManifest } from "../../services/github";
+import { getUserProfile } from "../../services/profile";
 import type { GameManifestItem } from "../../types/manifest";
+import type { UserProfile, UserStatus } from "../../types/profile";
+
+function getStatusDotClass(status: UserStatus) {
+  switch (status) {
+    case "En ligne":
+      return "bg-green-400";
+    case "Inactive":
+      return "bg-amber-400";
+    case "Hors ligne":
+      return "bg-zinc-500";
+  }
+}
 
 export default function SideNav() {
   const navigate = useNavigate();
   const [gamesOpen, setGamesOpen] = useState(true);
   const [games, setGames] = useState<GameManifestItem[]>([]);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
 
   useEffect(() => {
-    const loadGames = async () => {
+    const loadData = async () => {
       try {
-        const manifest = await getManifest();
+        const [manifest, userProfile] = await Promise.all([
+          getManifest(),
+          getUserProfile(),
+        ]);
+
         setGames(manifest.games);
+        setProfile(userProfile);
       } catch (error) {
-        console.error("Erreur chargement sidebar games:", error);
+        console.error("Erreur chargement sidebar:", error);
       }
     };
 
-    loadGames();
+    void loadData();
   }, []);
 
   const mainLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -37,7 +56,9 @@ export default function SideNav() {
             Z
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-wide text-white">ZeeLauncher</h1>
+            <h1 className="text-lg font-bold tracking-wide text-white">
+              ZeeLauncher
+            </h1>
             <p className="text-xs text-white/40">Riot × Steam style</p>
           </div>
         </div>
@@ -116,12 +137,33 @@ export default function SideNav() {
             ].join(" ")
           }
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-400/80 to-cyan-300/80 font-bold text-black">
-            M
+          <div className="relative">
+            {profile?.avatarUrl ? (
+              <img
+                src={profile.avatarUrl}
+                alt={profile.username}
+                className="h-10 w-10 rounded-full object-cover"
+              />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-400/80 to-cyan-300/80 font-bold text-black">
+                {profile?.username?.charAt(0)?.toUpperCase() || "M"}
+              </div>
+            )}
+
+            <span
+              className={`absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-[#0d1218] ${
+                profile ? getStatusDotClass(profile.status) : "bg-zinc-500"
+              }`}
+            />
           </div>
+
           <div>
-            <p className="text-sm font-semibold">Mon Profil</p>
-            <p className="text-xs text-white/40">Voir le profil joueur</p>
+            <p className="text-sm font-semibold">
+              {profile?.username || "Mon Profil"}
+            </p>
+            <p className="text-xs text-white/40">
+              {profile?.status || "Voir le profil joueur"}
+            </p>
           </div>
         </NavLink>
       </div>

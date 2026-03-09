@@ -83,6 +83,16 @@ struct NewsData {
     news: Vec<NewsItem>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct UserProfile {
+    username: String,
+    avatar_url: String,
+    banner_url: String,
+    bio: String,
+    status: String,
+}
+
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct InstallProgressPayload {
@@ -155,6 +165,21 @@ fn get_cache_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 fn get_installed_json_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let root = get_launcher_root(app)?;
     Ok(root.join("installed.json"))
+}
+
+fn get_profile_json_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let root = get_launcher_root(app)?;
+    Ok(root.join("profile.json"))
+}
+
+fn default_user_profile() -> UserProfile {
+    UserProfile {
+        username: "Mon Profil".to_string(),
+        avatar_url: "".to_string(),
+        banner_url: "".to_string(),
+        bio: "Joueur ZeELauncher".to_string(),
+        status: "En ligne".to_string(),
+    }
 }
 
 fn read_installed_map(app: &tauri::AppHandle) -> Result<InstalledGamesMap, String> {
@@ -451,6 +476,49 @@ async fn get_news(app: tauri::AppHandle) -> Result<NewsData, String> {
 }
 
 #[tauri::command]
+async fn get_user_profile(app: tauri::AppHandle) -> Result<UserProfile, String> {
+    let profile_path = get_profile_json_path(&app)?;
+
+    if !profile_path.exists() {
+        let profile = default_user_profile();
+        let json = serde_json::to_string_pretty(&profile)
+            .map_err(|e| format!("serialize default profile failed: {e}"))?;
+
+        fs::write(&profile_path, json)
+            .map_err(|e| format!("write default profile failed: {e}"))?;
+
+        return Ok(profile);
+    }
+
+    let content = fs::read_to_string(&profile_path)
+        .map_err(|e| format!("read profile failed: {e}"))?;
+
+    if content.trim().is_empty() {
+        return Ok(default_user_profile());
+    }
+
+    serde_json::from_str::<UserProfile>(&content)
+        .map_err(|e| format!("invalid profile.json format: {e}"))
+}
+
+#[tauri::command]
+async fn save_user_profile(app: tauri::AppHandle, profile: UserProfile) -> Result<(), String> {
+    let profile_path = get_profile_json_path(&app)?;
+    let tmp_path = profile_path.with_extension("json.tmp");
+
+    let json = serde_json::to_string_pretty(&profile)
+        .map_err(|e| format!("serialize profile failed: {e}"))?;
+
+    fs::write(&tmp_path, json)
+        .map_err(|e| format!("write temp profile failed: {e}"))?;
+
+    fs::rename(&tmp_path, &profile_path)
+        .map_err(|e| format!("rename temp profile failed: {e}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn list_installed(app: tauri::AppHandle) -> Result<InstalledGamesMap, String> {
     read_installed_map(&app)
 }
@@ -668,6 +736,8 @@ pub fn run() {
             get_manifest,
             get_patch_notes,
             get_news,
+            get_user_profile,
+            save_user_profile,
             list_installed,
             install_game,
             uninstall_game,
