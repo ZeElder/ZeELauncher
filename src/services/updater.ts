@@ -1,68 +1,60 @@
-import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
+import { getVersion } from "@tauri-apps/api/app";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
-export type LauncherUpdateInfo =
-  | { available: false }
-  | {
-      available: true;
-      version: string;
-      currentVersion: string;
-      body?: string;
-      date?: string;
-    };
+const UPDATE_URL =
+  "https://raw.githubusercontent.com/ZeElder/ZeELauncher/main/launcher-update.json";
 
-export async function checkForLauncherUpdate(): Promise<LauncherUpdateInfo> {
-  const update = await check();
-
-  if (!update) {
-    return { available: false };
-  }
-
-  return {
-    available: true,
-    version: update.version,
-    currentVersion: update.currentVersion,
-    body: update.body ?? "",
-    date: update.date ?? "",
-  };
+export interface LauncherUpdateFile {
+  version: string;
+  versionId?: number;
+  notes?: string;
+  downloadUrl: string;
 }
 
-export async function downloadAndInstallLauncherUpdate(
-  onProgress?: (progress: number) => void
-): Promise<boolean> {
-  const update = await check();
+export interface LauncherUpdateProgressEvent {
+  progress: number;
+  downloaded: number;
+  total?: number;
+  state: string;
+}
 
-  if (!update) {
-    return false;
-  }
+export async function checkLauncherUpdate(): Promise<LauncherUpdateFile | null> {
+  try {
+    const localVersion = await getVersion();
 
-  let downloaded = 0;
-  let contentLength = 0;
+    const response = await fetch(UPDATE_URL, {
+      cache: "no-store",
+    });
 
-  await update.downloadAndInstall((event) => {
-    switch (event.event) {
-      case "Started":
-        contentLength = event.data.contentLength ?? 0;
-        downloaded = 0;
-        onProgress?.(0);
-        break;
-
-      case "Progress":
-        downloaded += event.data.chunkLength ?? 0;
-        if (contentLength > 0) {
-          onProgress?.(Math.round((downloaded / contentLength) * 100));
-        }
-        break;
-
-      case "Finished":
-        onProgress?.(100);
-        break;
+    if (!response.ok) {
+      return null;
     }
-  });
 
-  return true;
+    const data = (await response.json()) as LauncherUpdateFile;
+
+    if (data.version !== localVersion) {
+      return data;
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Updater check failed:", error);
+    return null;
+  }
 }
 
-export async function relaunchLauncher() {
-  await relaunch();
+export async function installLauncherUpdate(downloadUrl: string): Promise<void> {
+  await invoke("install_launcher_update", { url: downloadUrl });
+}
+
+export async function onLauncherUpdateProgress(
+  callback: (event: LauncherUpdateProgressEvent) => void
+) {
+  return listen<LauncherUpdateProgressEvent>(
+    "launcher_update_progress",
+    (event) => {
+      callback(event.payload);
+    }
+  );
 }

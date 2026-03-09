@@ -7,6 +7,7 @@ use std::{
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
+    process::Command,
 };
 use tauri::{Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
@@ -18,7 +19,8 @@ const MANIFEST_URL: &str =
     "https://raw.githubusercontent.com/ZeElder/zeelauncher-data/main/manifest.json";
 const PATCHNOTES_URL: &str =
     "https://raw.githubusercontent.com/ZeElder/zeelauncher-data/main/patchnotes.json";
-const NEWS_URL: &str = "https://raw.githubusercontent.com/ZeElder/zeelauncher-data/main/news.json";
+const NEWS_URL: &str =
+    "https://raw.githubusercontent.com/ZeElder/zeelauncher-data/main/news.json";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct InstalledGameEntry {
@@ -96,6 +98,15 @@ struct InstallStatePayload {
     game_id: String,
     state: String,
     message: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct LauncherUpdateProgressPayload {
+    progress: u64,
+    downloaded: u64,
+    total: Option<u64>,
+    state: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -241,6 +252,25 @@ fn emit_extract_progress(
     .map_err(|e| format!("emit extract_progress failed: {e}"))
 }
 
+fn emit_launcher_update_progress(
+    app: &tauri::AppHandle,
+    progress: u64,
+    downloaded: u64,
+    total: Option<u64>,
+    state: &str,
+) -> Result<(), String> {
+    app.emit(
+        "launcher_update_progress",
+        LauncherUpdateProgressPayload {
+            progress,
+            downloaded,
+            total,
+            state: state.to_string(),
+        },
+    )
+    .map_err(|e| format!("emit launcher_update_progress failed: {e}"))
+}
+
 async fn fetch_text(url: &str) -> Result<String, String> {
     let client = reqwest::Client::new();
     let response = client
@@ -250,10 +280,7 @@ async fn fetch_text(url: &str) -> Result<String, String> {
         .map_err(|e| format!("request failed on {url}: {e}"))?;
 
     if !response.status().is_success() {
-        return Err(format!(
-            "request failed on {url} with status {}",
-            response.status()
-        ));
+        return Err(format!("request failed on {url} with status {}", response.status()));
     }
 
     response
@@ -355,10 +382,11 @@ fn extract_zip_sync(
     zip_path: &Path,
     target_dir: &Path,
 ) -> Result<(), String> {
-    let zip_file =
-        fs::File::open(zip_path).map_err(|e| format!("open zip failed on {:?}: {e}", zip_path))?;
+    let zip_file = fs::File::open(zip_path)
+        .map_err(|e| format!("open zip failed on {:?}: {e}", zip_path))?;
 
-    let mut archive = ZipArchive::new(zip_file).map_err(|e| format!("invalid zip archive: {e}"))?;
+    let mut archive =
+        ZipArchive::new(zip_file).map_err(|e| format!("invalid zip archive: {e}"))?;
 
     let total_entries = archive.len().max(1);
 
@@ -378,15 +406,15 @@ fn extract_zip_sync(
                 .map_err(|e| format!("create extracted dir failed: {e}"))?;
         } else {
             if let Some(parent) = outpath.parent() {
-                fs::create_dir_all(parent).map_err(|e| format!("create parent dir failed: {e}"))?;
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("create parent dir failed: {e}"))?;
             }
 
             let mut outfile = fs::File::create(&outpath)
                 .map_err(|e| format!("create extracted file failed: {e}"))?;
 
             let mut buffer = Vec::new();
-            entry
-                .read_to_end(&mut buffer)
+            entry.read_to_end(&mut buffer)
                 .map_err(|e| format!("read zip entry bytes failed: {e}"))?;
 
             outfile
@@ -431,12 +459,7 @@ async fn list_installed(app: tauri::AppHandle) -> Result<InstalledGamesMap, Stri
 async fn install_game(app: tauri::AppHandle, payload: InstallGamePayload) -> Result<(), String> {
     let game_id = payload.game_id.clone();
 
-    let _ = emit_install_state(
-        &app,
-        &game_id,
-        "downloading",
-        Some("Téléchargement...".into()),
-    );
+    let _ = emit_install_state(&app, &game_id, "downloading", Some("Téléchargement...".into()));
     let _ = emit_download_progress(&app, &game_id, 0, Some(0), None);
     let _ = emit_extract_progress(&app, &game_id, 0, Some(0), None);
 
@@ -463,12 +486,7 @@ async fn install_game(app: tauri::AppHandle, payload: InstallGamePayload) -> Res
     let staging_dir_clone = staging_dir.clone();
 
     tokio::task::spawn_blocking(move || {
-        extract_zip_sync(
-            &app_clone,
-            &game_id_clone,
-            &zip_path_clone,
-            &staging_dir_clone,
-        )
+        extract_zip_sync(&app_clone, &game_id_clone, &zip_path_clone, &staging_dir_clone)
     })
     .await
     .map_err(|e| format!("extract task join failed: {e}"))??;
@@ -496,12 +514,7 @@ async fn install_game(app: tauri::AppHandle, payload: InstallGamePayload) -> Res
     );
     write_installed_map(&app, &installed)?;
 
-    let _ = emit_install_state(
-        &app,
-        &game_id,
-        "completed",
-        Some("Installation terminée".into()),
-    );
+    let _ = emit_install_state(&app, &game_id, "completed", Some("Installation terminée".into()));
     Ok(())
 }
 
@@ -517,7 +530,8 @@ async fn uninstall_game(app: tauri::AppHandle, game_id: String) -> Result<(), St
     let install_dir = PathBuf::from(game.install_dir);
 
     if install_dir.exists() {
-        fs::remove_dir_all(&install_dir).map_err(|e| format!("remove game dir failed: {e}"))?;
+        fs::remove_dir_all(&install_dir)
+            .map_err(|e| format!("remove game dir failed: {e}"))?;
     }
 
     installed.remove(&game_id);
@@ -566,11 +580,76 @@ async fn open_game_folder(app: tauri::AppHandle, game_id: String) -> Result<(), 
     Ok(())
 }
 
+#[tauri::command]
+async fn install_launcher_update(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    let _ = emit_launcher_update_progress(&app, 0, 0, None, "downloading");
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("update request failed: {e}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "update download failed with status {}",
+            response.status()
+        ));
+    }
+
+    let total_size = response.content_length();
+    let mut downloaded: u64 = 0;
+    let mut stream = response.bytes_stream();
+
+    let installer_path = std::env::temp_dir().join("zeelauncher_update.exe");
+    let mut file = tokio::fs::File::create(&installer_path)
+        .await
+        .map_err(|e| format!("create update file failed: {e}"))?;
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result.map_err(|e| format!("update chunk failed: {e}"))?;
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| format!("write update chunk failed: {e}"))?;
+
+        downloaded += chunk.len() as u64;
+
+        let progress = if let Some(total) = total_size {
+            if total > 0 {
+                (downloaded.saturating_mul(100) / total).min(100)
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+
+        let _ = emit_launcher_update_progress(
+            &app,
+            progress,
+            downloaded,
+            total_size,
+            "downloading",
+        );
+    }
+
+    file.flush()
+        .await
+        .map_err(|e| format!("flush update file failed: {e}"))?;
+
+    let _ = emit_launcher_update_progress(&app, 100, downloaded, total_size, "launching");
+
+    Command::new(&installer_path)
+        .spawn()
+        .map_err(|e| format!("launch installer failed: {e}"))?;
+
+    std::process::exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -581,7 +660,8 @@ pub fn run() {
             install_game,
             uninstall_game,
             launch_game,
-            open_game_folder
+            open_game_folder,
+            install_launcher_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
