@@ -581,7 +581,7 @@ async fn open_game_folder(app: tauri::AppHandle, game_id: String) -> Result<(), 
 }
 
 #[tauri::command]
-async fn install_launcher_update(app: tauri::AppHandle, url: String) -> Result<(), String> {
+async fn download_launcher_update(app: tauri::AppHandle, url: String) -> Result<(), String> {
     let _ = emit_launcher_update_progress(&app, 0, 0, None, "downloading");
 
     let client = reqwest::Client::new();
@@ -638,7 +638,19 @@ async fn install_launcher_update(app: tauri::AppHandle, url: String) -> Result<(
         .await
         .map_err(|e| format!("flush update file failed: {e}"))?;
 
-    let _ = emit_launcher_update_progress(&app, 100, downloaded, total_size, "launching");
+    let _ = emit_launcher_update_progress(&app, 100, downloaded, total_size, "ready");
+    Ok(())
+}
+
+#[tauri::command]
+async fn install_downloaded_launcher_update(app: tauri::AppHandle) -> Result<(), String> {
+    let installer_path = std::env::temp_dir().join("zeelauncher_update.exe");
+
+    if !installer_path.exists() {
+        return Err("Aucune mise à jour téléchargée.".into());
+    }
+
+    let _ = emit_launcher_update_progress(&app, 100, 0, None, "launching");
 
     Command::new(&installer_path)
         .spawn()
@@ -661,7 +673,8 @@ pub fn run() {
             uninstall_game,
             launch_game,
             open_game_folder,
-            install_launcher_update
+            download_launcher_update,
+            install_downloaded_launcher_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

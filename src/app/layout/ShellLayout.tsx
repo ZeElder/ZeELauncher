@@ -5,55 +5,88 @@ import TopBar from "./TopBar";
 import FriendsPanel from "./FriendsPanel";
 import {
   checkLauncherUpdate,
-  installLauncherUpdate,
+  downloadLauncherUpdate,
+  installDownloadedLauncherUpdate,
   onLauncherUpdateProgress,
 } from "../../services/updater";
+
+type UpdateInfo = {
+  version: string;
+  versionId?: number;
+  notes?: string;
+  downloadUrl: string;
+};
 
 export default function ShellLayout() {
   const [friendsOpen, setFriendsOpen] = useState(false);
 
-  const [updateInfo, setUpdateInfo] = useState<null | {
-    version: string;
-    versionId?: number;
-    notes?: string;
-    downloadUrl: string;
-  }>(null);
-
-  const [updating, setUpdating] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateChecking, setUpdateChecking] = useState(true);
+  const [updateDownloading, setUpdateDownloading] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
   const [updateProgress, setUpdateProgress] = useState(0);
-  const [updateState, setUpdateState] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     const runUpdateCheck = async () => {
       try {
         const update = await checkLauncherUpdate();
 
-        if (update) {
-          setUpdateInfo({
-            version: update.version,
-            versionId: update.versionId,
-            notes: update.notes,
-            downloadUrl: update.downloadUrl,
-          });
+        if (cancelled || !update) {
+          return;
         }
+
+        setUpdateInfo({
+          version: update.version,
+          versionId: update.versionId,
+          notes: update.notes,
+          downloadUrl: update.downloadUrl,
+        });
+
+        setUpdateDownloading(true);
+        setUpdateProgress(0);
+
+        await downloadLauncherUpdate(update.downloadUrl);
       } catch (error) {
-        console.error("Custom launcher updater check failed:", error);
+        console.error("Silent launcher update failed:", error);
+        setUpdateDownloading(false);
+      } finally {
+        if (!cancelled) {
+          setUpdateChecking(false);
+        }
       }
     };
 
     void runUpdateCheck();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    let unlisten: Unlisten | null = null;
-
-    type Unlisten = () => void;
+    let unlisten: (() => void) | null = null;
 
     const setup = async () => {
       try {
         unlisten = await onLauncherUpdateProgress((event) => {
           setUpdateProgress(event.progress ?? 0);
-          setUpdateState(event.state ?? null);
+
+          if (event.state === "downloading") {
+            setUpdateDownloading(true);
+            setUpdateReady(false);
+          }
+
+          if (event.state === "ready") {
+            setUpdateDownloading(false);
+            setUpdateReady(true);
+            setUpdateProgress(100);
+          }
+
+          if (event.state === "launching") {
+            setUpdateDownloading(false);
+          }
         });
       } catch (error) {
         console.error("Updater event listen failed:", error);
@@ -69,22 +102,16 @@ export default function ShellLayout() {
     };
   }, []);
 
-  const handleLauncherUpdate = async () => {
-    if (!updateInfo) return;
-
+  const handleInstallDownloadedUpdate = async () => {
     try {
-      setUpdating(true);
-      setUpdateProgress(0);
-      setUpdateState("downloading");
-      await installLauncherUpdate(updateInfo.downloadUrl);
+      await installDownloadedLauncherUpdate();
     } catch (error) {
       console.error(error);
       alert(
         error instanceof Error
           ? error.message
-          : "Erreur mise à jour launcher"
+          : "Erreur installation mise à jour launcher"
       );
-      setUpdating(false);
     }
   };
 
@@ -121,22 +148,11 @@ export default function ShellLayout() {
                   )}
                 </div>
 
-                <div className="flex min-w-[280px] flex-col gap-3">
-                  {!updating && (
-                    <button
-                      onClick={handleLauncherUpdate}
-                      className="rounded-2xl bg-amber-500 px-5 py-3 font-semibold text-white transition hover:bg-amber-400"
-                    >
-                      Mettre à jour le launcher
-                    </button>
-                  )}
-
-                  {updating && (
+                <div className="flex min-w-[320px] flex-col gap-3">
+                  {updateDownloading && (
                     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                       <p className="mb-3 text-sm font-medium text-white/75">
-                        {updateState === "launching"
-                          ? "Lancement de l’installateur..."
-                          : "Téléchargement de la mise à jour..."}
+                        Téléchargement automatique de la mise à jour...
                       </p>
 
                       <div className="mb-2 flex justify-between text-xs text-white/50">
@@ -150,6 +166,21 @@ export default function ShellLayout() {
                           style={{ width: `${updateProgress}%` }}
                         />
                       </div>
+                    </div>
+                  )}
+
+                  {updateReady && (
+                    <button
+                      onClick={handleInstallDownloadedUpdate}
+                      className="rounded-2xl bg-amber-500 px-5 py-3 font-semibold text-white transition hover:bg-amber-400"
+                    >
+                      Redémarrer pour mettre à jour
+                    </button>
+                  )}
+
+                  {!updateDownloading && !updateReady && !updateChecking && (
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/65">
+                      Mise à jour détectée. Le téléchargement n’a pas pu être finalisé automatiquement.
                     </div>
                   )}
                 </div>
