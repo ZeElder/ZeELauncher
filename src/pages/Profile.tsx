@@ -1,11 +1,27 @@
 import { useEffect, useState } from "react";
-import { getUserProfile, saveUserProfile } from "../services/profile";
-import type { UserProfile, UserStatus } from "../types/profile";
+import { getCurrentUser } from "../services/auth";
+import {
+  getMyRemoteProfile,
+  updateMyRemoteProfile,
+} from "../services/profileRemote";
+import { uploadAvatar, uploadBanner } from "../services/storage";
+import { notifyProfileUpdate } from "../stores/profileStore";
+import type { UserStatus } from "../types/profile";
 
-const defaultProfile: UserProfile = {
+type ProfileForm = {
+  email: string;
+  username: string;
+  avatar_url: string;
+  banner_url: string;
+  bio: string;
+  status: UserStatus;
+};
+
+const defaultProfile: ProfileForm = {
+  email: "",
   username: "",
-  avatarUrl: "",
-  bannerUrl: "",
+  avatar_url: "",
+  banner_url: "",
   bio: "",
   status: "En ligne",
 };
@@ -23,37 +39,37 @@ function getStatusDotClass(status: UserStatus) {
   }
 }
 
-async function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-      } else {
-        reject(new Error("Impossible de lire le fichier."));
-      }
-    };
-
-    reader.onerror = () => reject(new Error("Erreur lecture fichier."));
-    reader.readAsDataURL(file);
-  });
-}
-
 export default function Profile() {
-  const [profile, setProfile] = useState<UserProfile>(defaultProfile);
+  const [profile, setProfile] = useState<ProfileForm>(defaultProfile);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        const data = await getUserProfile();
-        setProfile(data);
+        setLoading(true);
+        setMessage(null);
+
+        const data = await getMyRemoteProfile();
+
+        setProfile({
+          email: data.email,
+          username: data.username,
+          avatar_url: data.avatar_url,
+          banner_url: data.banner_url,
+          bio: data.bio,
+          status: data.status,
+        });
       } catch (error) {
         console.error(error);
-        setMessage("Impossible de charger le profil.");
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Impossible de charger le profil."
+        );
       } finally {
         setLoading(false);
       }
@@ -62,20 +78,6 @@ export default function Profile() {
     void loadProfile();
   }, []);
 
-  const handleSave = async () => {
-    try {
-      setSaving(true);
-      setMessage(null);
-      await saveUserProfile(profile);
-      setMessage("Profil sauvegardé avec succès.");
-    } catch (error) {
-      console.error(error);
-      setMessage("Erreur lors de la sauvegarde.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleAvatarUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -83,14 +85,30 @@ export default function Profile() {
       const file = event.target.files?.[0];
       if (!file) return;
 
-      const dataUrl = await fileToDataUrl(file);
+      setUploadingAvatar(true);
+      setMessage(null);
+
+      const { data, error } = await getCurrentUser();
+      if (error) throw error;
+      if (!data.user) throw new Error("Utilisateur non connecté.");
+
+      const url = await uploadAvatar(file, data.user.id);
+
       setProfile((prev) => ({
         ...prev,
-        avatarUrl: dataUrl,
+        avatar_url: url,
       }));
+
+      setMessage("Avatar chargé. N’oublie pas de sauvegarder.");
     } catch (error) {
       console.error(error);
-      setMessage("Impossible de charger l’avatar.");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Erreur upload avatar."
+      );
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
@@ -101,14 +119,69 @@ export default function Profile() {
       const file = event.target.files?.[0];
       if (!file) return;
 
-      const dataUrl = await fileToDataUrl(file);
+      setUploadingBanner(true);
+      setMessage(null);
+
+      const { data, error } = await getCurrentUser();
+      if (error) throw error;
+      if (!data.user) throw new Error("Utilisateur non connecté.");
+
+      const url = await uploadBanner(file, data.user.id);
+
       setProfile((prev) => ({
         ...prev,
-        bannerUrl: dataUrl,
+        banner_url: url,
       }));
+
+      setMessage("Bannière chargée. N’oublie pas de sauvegarder.");
     } catch (error) {
       console.error(error);
-      setMessage("Impossible de charger la bannière.");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Erreur upload bannière."
+      );
+    } finally {
+      setUploadingBanner(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setMessage(null);
+
+      const updated = await updateMyRemoteProfile({
+        username: profile.username,
+        bio: profile.bio,
+        status: profile.status,
+        avatar_url: profile.avatar_url,
+        banner_url: profile.banner_url,
+      });
+
+      setProfile({
+        email: updated.email,
+        username: updated.username,
+        avatar_url: updated.avatar_url,
+        banner_url: updated.banner_url,
+        bio: updated.bio,
+        status: updated.status,
+      });
+
+      notifyProfileUpdate(updated);
+      setMessage("Profil synchronisé avec Supabase.");
+    } catch (error: any) {
+  console.error("PROFILE SAVE ERROR:", error);
+
+  const detailedMessage =
+    error?.message ||
+    error?.error_description ||
+    error?.details ||
+    "Erreur lors de la sauvegarde.";
+
+  setMessage(detailedMessage);
+} finally {
+      setSaving(false);
     }
   };
 
@@ -124,9 +197,9 @@ export default function Profile() {
     <div className="space-y-8">
       <section className="overflow-hidden rounded-[28px] border border-white/10 bg-[#11161d] shadow-[0_18px_60px_rgba(0,0,0,0.25)]">
         <div className="relative h-56 overflow-hidden">
-          {profile.bannerUrl ? (
+          {profile.banner_url ? (
             <img
-              src={profile.bannerUrl}
+              src={profile.banner_url}
               alt="Bannière profil"
               className="h-full w-full object-cover"
             />
@@ -137,12 +210,13 @@ export default function Profile() {
           <div className="absolute inset-0 bg-gradient-to-t from-[#11161d] via-transparent to-transparent" />
 
           <label className="absolute right-4 top-4 cursor-pointer rounded-2xl border border-white/10 bg-black/35 px-4 py-2 text-sm font-medium text-white backdrop-blur hover:bg-black/45">
-            Changer la bannière
+            {uploadingBanner ? "Upload..." : "Changer la bannière"}
             <input
               type="file"
               accept="image/*"
               className="hidden"
               onChange={handleBannerUpload}
+              disabled={uploadingBanner}
             />
           </label>
         </div>
@@ -152,9 +226,9 @@ export default function Profile() {
             <div className="w-full max-w-sm rounded-[24px] border border-white/10 bg-white/5 p-5 backdrop-blur">
               <div className="flex flex-col items-center text-center">
                 <div className="relative">
-                  {profile.avatarUrl ? (
+                  {profile.avatar_url ? (
                     <img
-                      src={profile.avatarUrl}
+                      src={profile.avatar_url}
                       alt={profile.username}
                       className="h-28 w-28 rounded-full object-cover ring-4 ring-[#11161d]"
                     />
@@ -173,12 +247,13 @@ export default function Profile() {
                 </div>
 
                 <label className="mt-4 cursor-pointer rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10">
-                  Changer l’avatar
+                  {uploadingAvatar ? "Upload..." : "Changer l’avatar"}
                   <input
                     type="file"
                     accept="image/*"
                     className="hidden"
                     onChange={handleAvatarUpload}
+                    disabled={uploadingAvatar}
                   />
                 </label>
 
@@ -186,7 +261,9 @@ export default function Profile() {
                   {profile.username || "Mon Profil"}
                 </h2>
 
-                <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm text-white/70">
+                <p className="mt-2 text-sm text-white/45">{profile.email}</p>
+
+                <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm text-white/70">
                   <span
                     className={`h-2.5 w-2.5 rounded-full ${getStatusDotClass(
                       profile.status
@@ -203,11 +280,11 @@ export default function Profile() {
 
             <div className="flex-1 rounded-[24px] border border-white/10 bg-white/5 p-6">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/30">
-                Compte local
+                Compte en ligne
               </p>
               <h1 className="mt-2 text-4xl font-bold text-white">Mon Profil</h1>
               <p className="mt-2 text-white/60">
-                Personnalise ton profil local avant la future connexion en ligne.
+                Ce profil est synchronisé avec ton compte Supabase.
               </p>
 
               <div className="mt-8 space-y-5">

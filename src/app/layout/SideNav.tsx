@@ -1,9 +1,17 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { getManifest } from "../../services/github";
-import { getUserProfile } from "../../services/profile";
+import { logout } from "../../services/auth";
+import { getMyRemoteProfile } from "../../services/profileRemote";
+import { subscribeProfile } from "../../stores/profileStore";
 import type { GameManifestItem } from "../../types/manifest";
-import type { UserProfile, UserStatus } from "../../types/profile";
+import type { UserStatus } from "../../types/profile";
+
+type SidebarProfile = {
+  username: string;
+  avatar_url: string;
+  status: UserStatus;
+};
 
 function getStatusDotClass(status: UserStatus) {
   switch (status) {
@@ -20,25 +28,53 @@ export default function SideNav() {
   const navigate = useNavigate();
   const [gamesOpen, setGamesOpen] = useState(true);
   const [games, setGames] = useState<GameManifestItem[]>([]);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<SidebarProfile | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [manifest, userProfile] = await Promise.all([
+        const [manifest, remoteProfile] = await Promise.all([
           getManifest(),
-          getUserProfile(),
+          getMyRemoteProfile(),
         ]);
 
         setGames(manifest.games);
-        setProfile(userProfile);
+        setProfile({
+          username: remoteProfile.username,
+          avatar_url: remoteProfile.avatar_url,
+          status: remoteProfile.status,
+        });
       } catch (error) {
         console.error("Erreur chargement sidebar:", error);
       }
     };
 
     void loadData();
+
+    const unsubscribe = subscribeProfile((updated) => {
+      setProfile({
+        username: updated.username,
+        avatar_url: updated.avatar_url,
+        status: updated.status,
+      });
+    });
+
+    return unsubscribe;
   }, []);
+
+  const handleLogout = async () => {
+    try {
+      setLoggingOut(true);
+      await logout();
+      navigate("/login", { replace: true });
+    } catch (error) {
+      console.error(error);
+      alert(error instanceof Error ? error.message : "Erreur déconnexion");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
 
   const mainLinkClass = ({ isActive }: { isActive: boolean }) =>
     [
@@ -121,8 +157,8 @@ export default function SideNav() {
         </div>
       </nav>
 
-      <div className="mt-auto">
-        <div className="mb-3 px-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/30">
+      <div className="mt-auto space-y-3">
+        <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/30">
           Compte
         </div>
 
@@ -138,9 +174,9 @@ export default function SideNav() {
           }
         >
           <div className="relative">
-            {profile?.avatarUrl ? (
+            {profile?.avatar_url ? (
               <img
-                src={profile.avatarUrl}
+                src={profile.avatar_url}
                 alt={profile.username}
                 className="h-10 w-10 rounded-full object-cover"
               />
@@ -162,10 +198,18 @@ export default function SideNav() {
               {profile?.username || "Mon Profil"}
             </p>
             <p className="text-xs text-white/40">
-              {profile?.status || "Voir le profil joueur"}
+              {profile?.status || "Chargement..."}
             </p>
           </div>
         </NavLink>
+
+        <button
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white/75 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {loggingOut ? "Déconnexion..." : "Se déconnecter"}
+        </button>
       </div>
     </aside>
   );

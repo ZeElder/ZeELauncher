@@ -6,5 +6,5 @@ export async function getUserProfile(): Promise<UserProfile> {
 }
 
 export async function saveUserProfile(profile: UserProfile): Promise<void> {
-  return invoke("save_user_profile", { profile });
+  await invoke("save_user_profile", { profile });
 }
