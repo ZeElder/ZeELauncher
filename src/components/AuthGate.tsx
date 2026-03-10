@@ -35,7 +35,7 @@ export default function AuthGate({ children }: Props) {
 
     const {
       data: { subscription },
-    } = onAuthStateChange((_event, session) => {
+    } = onAuthStateChange(async (_event, session) => {
       setIsAuthed(!!session);
       setLoading(false);
     });

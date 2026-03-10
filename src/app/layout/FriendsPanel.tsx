@@ -31,7 +31,6 @@ export default function FriendsPanel({ open, onClose }: Props) {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [friends, setFriends] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const onlineFriends = useMemo(
@@ -46,7 +45,6 @@ export default function FriendsPanel({ open, onClose }: Props) {
 
   const loadPanelData = async () => {
     try {
-      setLoading(true);
       setMessage(null);
 
       const [friendsData, requestsData] = await Promise.all([
@@ -59,8 +57,6 @@ export default function FriendsPanel({ open, onClose }: Props) {
     } catch (error) {
       console.error(error);
       setMessage(error instanceof Error ? error.message : "Erreur chargement amis.");
-    } finally {
-      setLoading(false);
     }
   };
 
