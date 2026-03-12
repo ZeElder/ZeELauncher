@@ -11,6 +11,7 @@ import {
   openGameFolder,
   uninstallGame,
 } from "../services/launcherApi";
+import SmartCover from "../components/SmartCover";
 import type { GameManifestItem } from "../types/manifest";
 import type {
   GameInstallState,
@@ -95,11 +96,14 @@ export default function GameDetails() {
   const [activeTab, setActiveTab] = useState<DetailTab>("general");
 
   const reloadGame = async () => {
-    if (!gameId) return;
+    if (!gameId) {
+      throw new Error("Identifiant de jeu manquant.");
+    }
 
-    const [manifest, installed] = await Promise.all([
+    const [manifest, installed, patchData] = await Promise.all([
       getManifest(),
       listInstalled(),
+      getPatchNotes(),
     ]);
 
     const foundGame = manifest.games.find((g) => g.id === gameId) ?? null;
@@ -108,11 +112,11 @@ export default function GameDetails() {
       throw new Error("Jeu introuvable.");
     }
 
-    const patchData = await getPatchNotes();
-
     const filteredPatches = patchData.patches
       .filter((patch) => patch.game.toLowerCase() === foundGame.name.toLowerCase())
-      .sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }));
+      .sort((a, b) =>
+        b.version.localeCompare(a.version, undefined, { numeric: true })
+      );
 
     setGame(foundGame);
     setInstalledMap(installed);
@@ -137,7 +141,7 @@ export default function GameDetails() {
       }
     };
 
-    loadGame();
+    void loadGame();
   }, [gameId]);
 
   useEffect(() => {
@@ -174,7 +178,7 @@ export default function GameDetails() {
       });
     };
 
-    setup();
+    void setup();
 
     return () => {
       unlistenDownload?.();
@@ -250,11 +254,29 @@ export default function GameDetails() {
     }
   };
 
+  const handleLaunch = async () => {
+    try {
+      await launchGame(game.id);
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Erreur lancement jeu");
+    }
+  };
+
+  const handleOpenFolder = async () => {
+    try {
+      await openGameFolder(game.id);
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Erreur ouverture dossier");
+    }
+  };
+
   return (
     <div className="space-y-8">
       <section className="overflow-hidden rounded-[28px] border border-white/10 bg-[#11161d] shadow-[0_18px_60px_rgba(0,0,0,0.3)]">
         <div className="relative h-[320px] overflow-hidden">
-          <img
+          <SmartCover
             src={game.cover}
             alt={game.name}
             className="h-full w-full object-cover"
@@ -269,23 +291,14 @@ export default function GameDetails() {
                 <p className="text-xs font-semibold uppercase tracking-[0.25em] text-blue-300/70">
                   Jeu
                 </p>
-                <h1 className="mt-2 text-4xl font-bold text-white">{game.name}</h1>
+                <h1 className="mt-2 text-4xl font-bold text-white">
+                  {game.name}
+                </h1>
               </div>
 
               {(state === "installed" || state === "update_available") && (
                 <button
-                  onClick={async () => {
-                    try {
-                      await openGameFolder(game.id);
-                    } catch (err) {
-                      console.error(err);
-                      alert(
-                        err instanceof Error
-                          ? err.message
-                          : "Erreur ouverture dossier"
-                      );
-                    }
-                  }}
+                  onClick={() => void handleOpenFolder()}
                   title="Ouvrir le dossier du jeu"
                   className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-xl text-white transition hover:bg-white/10"
                 >
@@ -373,7 +386,7 @@ export default function GameDetails() {
                 <div className="mt-6 flex flex-wrap gap-3">
                   {state === "not_installed" && (
                     <button
-                      onClick={handleInstall}
+                      onClick={() => void handleInstall()}
                       disabled={busy}
                       className="rounded-2xl bg-green-600 px-5 py-3 font-semibold text-white transition hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
                     >
@@ -384,7 +397,7 @@ export default function GameDetails() {
                   {state === "update_available" && (
                     <>
                       <button
-                        onClick={handleInstall}
+                        onClick={() => void handleInstall()}
                         disabled={busy}
                         className="rounded-2xl bg-amber-500 px-5 py-3 font-semibold text-white transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
                       >
@@ -392,7 +405,7 @@ export default function GameDetails() {
                       </button>
 
                       <button
-                        onClick={handleUninstall}
+                        onClick={() => void handleUninstall()}
                         disabled={busy}
                         className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-3 font-semibold text-red-300 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
                       >
@@ -404,25 +417,14 @@ export default function GameDetails() {
                   {state === "installed" && (
                     <>
                       <button
-                        onClick={async () => {
-                          try {
-                            await launchGame(game.id);
-                          } catch (err) {
-                            console.error(err);
-                            alert(
-                              err instanceof Error
-                                ? err.message
-                                : "Erreur lancement jeu"
-                            );
-                          }
-                        }}
+                        onClick={() => void handleLaunch()}
                         className="rounded-2xl bg-green-600 px-5 py-3 font-semibold text-white transition hover:bg-green-500"
                       >
                         Jouer
                       </button>
 
                       <button
-                        onClick={handleUninstall}
+                        onClick={() => void handleUninstall()}
                         disabled={busy}
                         className="rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-3 font-semibold text-red-300 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
                       >

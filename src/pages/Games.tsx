@@ -10,6 +10,7 @@ import {
   onInstallState,
   uninstallGame,
 } from "../services/launcherApi";
+import SmartCover from "../components/SmartCover";
 import type { GameManifestItem } from "../types/manifest";
 import type {
   GameInstallState,
@@ -123,7 +124,7 @@ export default function Games() {
   };
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
   useEffect(() => {
@@ -179,7 +180,7 @@ export default function Games() {
       });
     };
 
-    setup();
+    void setup();
 
     return () => {
       unlistenDownload?.();
@@ -384,7 +385,7 @@ export default function Games() {
         <div className="mt-6 flex flex-wrap items-center gap-3">
           {updateCandidates.length > 0 && (
             <button
-              onClick={handleUpdateAll}
+              onClick={() => void handleUpdateAll()}
               disabled={bulkUpdating || busyGameId !== null}
               className="rounded-2xl bg-amber-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -475,7 +476,7 @@ export default function Games() {
                 className="group overflow-hidden rounded-[26px] border border-white/8 bg-[#11161d] transition duration-300 hover:-translate-y-1 hover:border-white/15 hover:shadow-[0_18px_50px_rgba(0,0,0,0.32)]"
               >
                 <div className="relative h-56 overflow-hidden">
-                  <img
+                  <SmartCover
                     src={game.cover}
                     alt={game.name}
                     className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
@@ -560,7 +561,7 @@ export default function Games() {
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          handleInstall(game);
+                          void handleInstall(game);
                         }}
                         disabled={isBusy || bulkUpdating}
                         className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
@@ -575,7 +576,7 @@ export default function Games() {
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            handleInstall(game);
+                            void handleInstall(game);
                           }}
                           disabled={isBusy || bulkUpdating}
                           className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
@@ -587,7 +588,7 @@ export default function Games() {
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            handleUninstall(game.id);
+                            void handleUninstall(game.id);
                           }}
                           disabled={isBusy || bulkUpdating}
                           className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
@@ -603,7 +604,7 @@ export default function Games() {
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            handleLaunch(game.id);
+                            void handleLaunch(game.id);
                           }}
                           disabled={isBusy || bulkUpdating}
                           className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
@@ -615,7 +616,7 @@ export default function Games() {
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            handleUninstall(game.id);
+                            void handleUninstall(game.id);
                           }}
                           disabled={isBusy || bulkUpdating}
                           className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
