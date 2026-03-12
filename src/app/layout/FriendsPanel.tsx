@@ -34,6 +34,7 @@ type FriendLike = {
   requestId: string;
   userId: string;
   username: string;
+  tag: string;
   avatar_url: string;
   status: UserStatus;
   bio: string;
@@ -494,7 +495,7 @@ export default function FriendsPanel({
 
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-white">
-            {friend.username}
+            {friend.username}#{friend.tag}
           </p>
 
           <p className="truncate text-xs text-white/40">
@@ -539,7 +540,7 @@ export default function FriendsPanel({
           <input
             value={search}
             onChange={(e) => void handleSearch(e.target.value)}
-            placeholder="Rechercher un pseudo..."
+            placeholder="Rechercher un pseudo ou pseudo#tag..."
             className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-white/30"
           />
 
@@ -565,7 +566,7 @@ export default function FriendsPanel({
 
                     <div>
                       <p className="text-sm font-semibold text-white">
-                        {user.username}
+                        {user.username}#{user.tag}
                       </p>
                       <p className="text-xs text-white/45">{user.status}</p>
                     </div>
@@ -599,7 +600,7 @@ export default function FriendsPanel({
                     className="rounded-2xl border border-white/10 bg-white/5 p-3"
                   >
                     <p className="truncate text-sm font-semibold text-white">
-                      {request.username}
+                      {request.username}#{request.tag}
                     </p>
 
                     <div className="mt-3 flex gap-2">
@@ -686,7 +687,7 @@ export default function FriendsPanel({
 
                     <div>
                       <p className="text-base font-semibold text-white">
-                        {selectedFriend.username}
+                        {selectedFriend.username}#{selectedFriend.tag}
                       </p>
                       <p className="text-xs text-white/45">
                         {selectedFriendLiveStatus}

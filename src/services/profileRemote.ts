@@ -5,10 +5,15 @@ export interface RemoteProfile {
   id: string;
   email: string;
   username: string;
+  tag: string;
   avatar_url: string;
   banner_url: string;
   bio: string;
   status: UserStatus;
+}
+
+function generateTag() {
+  return String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0");
 }
 
 export async function createProfileIfMissing(user: {
@@ -30,12 +35,15 @@ export async function createProfileIfMissing(user: {
     return existing as RemoteProfile;
   }
 
+  const tag = generateTag();
+
   const { data, error } = await supabase
     .from("profiles")
     .insert({
       id: user.id,
       email: user.email ?? "",
       username: "Nouveau joueur",
+      tag,
       avatar_url: "",
       banner_url: "",
       bio: "",
@@ -107,12 +115,10 @@ export async function updateMyRemoteProfile(profile: {
 
   const user = userData.user;
 
-  const ensured = await createProfileIfMissing({
+  await createProfileIfMissing({
     id: user.id,
     email: user.email,
   });
-
-  console.log("updateMyRemoteProfile ensured profile:", ensured);
 
   const payload = {
     username: profile.username,
@@ -121,8 +127,6 @@ export async function updateMyRemoteProfile(profile: {
     avatar_url: profile.avatar_url,
     banner_url: profile.banner_url,
   };
-
-  console.log("updateMyRemoteProfile payload:", payload);
 
   const { data, error } = await supabase
     .from("profiles")

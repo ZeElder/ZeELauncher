@@ -7,6 +7,7 @@ export interface ProfileSearchResult {
   id: string;
   email: string;
   username: string;
+  tag: string;
   avatar_url: string;
   banner_url: string;
   bio: string;
@@ -25,6 +26,7 @@ export interface FriendItem {
   requestId: string;
   userId: string;
   username: string;
+  tag: string;
   avatar_url: string;
   status: UserStatus;
   bio: string;
@@ -45,6 +47,26 @@ export async function searchProfiles(query: string): Promise<ProfileSearchResult
   if (!trimmed) return [];
 
   const myUserId = await getCurrentUserId();
+
+  if (trimmed.includes("#")) {
+    const [usernamePart, tagPart] = trimmed.split("#");
+    const username = usernamePart.trim();
+    const tag = tagPart?.trim();
+
+    if (!username || !tag) return [];
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("username", username)
+      .eq("tag", tag)
+      .neq("id", myUserId)
+      .limit(10);
+
+    if (error) throw error;
+
+    return (data ?? []) as ProfileSearchResult[];
+  }
 
   const { data, error } = await supabase
     .from("profiles")
@@ -123,9 +145,7 @@ export async function getIncomingFriendRequests() {
 
   if (profilesError) throw profilesError;
 
-  const profilesMap = new Map(
-    (profiles ?? []).map((p: any) => [p.id, p])
-  );
+  const profilesMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
 
   return rows.map((row) => {
     const sender = profilesMap.get(row.sender_id);
@@ -134,6 +154,7 @@ export async function getIncomingFriendRequests() {
       requestId: row.id,
       senderId: row.sender_id,
       username: sender?.username ?? "Inconnu",
+      tag: sender?.tag ?? "0000",
       avatar_url: sender?.avatar_url ?? "",
       status: sender?.status ?? "Hors ligne",
       bio: sender?.bio ?? "",
@@ -206,9 +227,7 @@ export async function getFriendsList(): Promise<FriendItem[]> {
 
   if (profilesError) throw profilesError;
 
-  const profilesMap = new Map(
-    (profiles ?? []).map((p: any) => [p.id, p])
-  );
+  const profilesMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
 
   return rows.map((row) => {
     const otherUserId =
@@ -220,6 +239,7 @@ export async function getFriendsList(): Promise<FriendItem[]> {
       requestId: row.id,
       userId: otherUserId,
       username: profile?.username ?? "Inconnu",
+      tag: profile?.tag ?? "0000",
       avatar_url: profile?.avatar_url ?? "",
       status: profile?.status ?? "Hors ligne",
       bio: profile?.bio ?? "",

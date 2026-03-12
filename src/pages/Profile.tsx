@@ -11,6 +11,7 @@ import type { UserStatus } from "../types/profile";
 type ProfileForm = {
   email: string;
   username: string;
+  tag: string;
   avatar_url: string;
   banner_url: string;
   bio: string;
@@ -20,6 +21,7 @@ type ProfileForm = {
 const defaultProfile: ProfileForm = {
   email: "",
   username: "",
+  tag: "",
   avatar_url: "",
   banner_url: "",
   bio: "",
@@ -58,6 +60,7 @@ export default function Profile() {
         setProfile({
           email: data.email,
           username: data.username,
+          tag: data.tag,
           avatar_url: data.avatar_url,
           banner_url: data.banner_url,
           bio: data.bio,
@@ -103,9 +106,7 @@ export default function Profile() {
     } catch (error) {
       console.error(error);
       setMessage(
-        error instanceof Error
-          ? error.message
-          : "Erreur upload avatar."
+        error instanceof Error ? error.message : "Erreur upload avatar."
       );
     } finally {
       setUploadingAvatar(false);
@@ -137,9 +138,7 @@ export default function Profile() {
     } catch (error) {
       console.error(error);
       setMessage(
-        error instanceof Error
-          ? error.message
-          : "Erreur upload bannière."
+        error instanceof Error ? error.message : "Erreur upload bannière."
       );
     } finally {
       setUploadingBanner(false);
@@ -162,6 +161,7 @@ export default function Profile() {
       setProfile({
         email: updated.email,
         username: updated.username,
+        tag: updated.tag,
         avatar_url: updated.avatar_url,
         banner_url: updated.banner_url,
         bio: updated.bio,
@@ -171,16 +171,16 @@ export default function Profile() {
       notifyProfileUpdate(updated);
       setMessage("Profil synchronisé avec Supabase.");
     } catch (error: any) {
-  console.error("PROFILE SAVE ERROR:", error);
+      console.error("PROFILE SAVE ERROR:", error);
 
-  const detailedMessage =
-    error?.message ||
-    error?.error_description ||
-    error?.details ||
-    "Erreur lors de la sauvegarde.";
+      const detailedMessage =
+        error?.message ||
+        error?.error_description ||
+        error?.details ||
+        "Erreur lors de la sauvegarde.";
 
-  setMessage(detailedMessage);
-} finally {
+      setMessage(detailedMessage);
+    } finally {
       setSaving(false);
     }
   };
@@ -259,6 +259,7 @@ export default function Profile() {
 
                 <h2 className="mt-4 text-xl font-semibold text-white">
                   {profile.username || "Mon Profil"}
+                  {profile.tag ? `#${profile.tag}` : ""}
                 </h2>
 
                 <p className="mt-2 text-sm text-white/45">{profile.email}</p>
@@ -288,21 +289,32 @@ export default function Profile() {
               </p>
 
               <div className="mt-8 space-y-5">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-white/75">
-                    Pseudo
-                  </label>
-                  <input
-                    value={profile.username}
-                    onChange={(e) =>
-                      setProfile((prev) => ({
-                        ...prev,
-                        username: e.target.value,
-                      }))
-                    }
-                    placeholder="Ton pseudo"
-                    className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-white/30"
-                  />
+                <div className="grid gap-5 md:grid-cols-[1fr_180px]">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-white/75">
+                      Pseudo
+                    </label>
+                    <input
+                      value={profile.username}
+                      onChange={(e) =>
+                        setProfile((prev) => ({
+                          ...prev,
+                          username: e.target.value,
+                        }))
+                      }
+                      placeholder="Ton pseudo"
+                      className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-white/30"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-white/75">
+                      Tag
+                    </label>
+                    <div className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-white/70">
+                      #{profile.tag || "----"}
+                    </div>
+                  </div>
                 </div>
 
                 <div>
@@ -370,9 +382,7 @@ export default function Profile() {
                     {saving ? "Sauvegarde..." : "Sauvegarder"}
                   </button>
 
-                  {message && (
-                    <p className="text-sm text-white/65">{message}</p>
-                  )}
+                  {message && <p className="text-sm text-white/65">{message}</p>}
                 </div>
               </div>
             </div>

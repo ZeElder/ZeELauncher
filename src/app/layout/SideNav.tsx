@@ -9,6 +9,7 @@ import type { UserStatus } from "../../types/profile";
 
 type SidebarProfile = {
   username: string;
+  tag: string;
   avatar_url: string;
   status: UserStatus;
 };
@@ -42,6 +43,7 @@ export default function SideNav() {
         setGames(manifest.games);
         setProfile({
           username: remoteProfile.username,
+          tag: remoteProfile.tag,
           avatar_url: remoteProfile.avatar_url,
           status: remoteProfile.status,
         });
@@ -55,6 +57,7 @@ export default function SideNav() {
     const unsubscribe = subscribeProfile((updated) => {
       setProfile({
         username: updated.username,
+        tag: updated.tag,
         avatar_url: updated.avatar_url,
         status: updated.status,
       });
@@ -195,7 +198,7 @@ export default function SideNav() {
 
           <div>
             <p className="text-sm font-semibold">
-              {profile?.username || "Mon Profil"}
+              {profile ? `${profile.username}#${profile.tag}` : "Mon Profil"}
             </p>
             <p className="text-xs text-white/40">
               {profile?.status || "Chargement..."}
