@@ -11,6 +11,7 @@ import {
   uninstallGame,
 } from "../services/launcherApi";
 import SmartCover from "../components/SmartCover";
+import { getSafeErrorMessage } from "../utils/errorMessage";
 import type { GameManifestItem } from "../types/manifest";
 import type {
   GameInstallState,
@@ -113,11 +114,7 @@ export default function Games() {
       setInstalledMap(installed);
     } catch (err) {
       console.error("Games page error:", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Impossible de charger les jeux."
-      );
+      setError(getSafeErrorMessage(err, "Impossible de charger les jeux."));
     } finally {
       setLoading(false);
     }
@@ -261,13 +258,14 @@ export default function Games() {
         gameName: game.name,
         version: game.version,
         downloadUrl: game.downloadUrl,
+        sha256: game.sha256,
         exeRelativePath: game.exe,
         launcherName: "ZeELauncher",
       });
     } catch (err) {
       console.error(err);
       setBusyGameId(null);
-      alert(err instanceof Error ? err.message : "Erreur installation");
+      alert(getSafeErrorMessage(err, "Impossible d’installer le jeu."));
     }
   };
 
@@ -277,7 +275,7 @@ export default function Games() {
       await launchGame(gameId);
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error ? err.message : "Erreur lancement");
+      alert(getSafeErrorMessage(err, "Impossible de lancer le jeu."));
     } finally {
       setBusyGameId(null);
     }
@@ -290,7 +288,7 @@ export default function Games() {
       await loadData();
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error ? err.message : "Erreur désinstallation");
+      alert(getSafeErrorMessage(err, "Impossible de désinstaller le jeu."));
     } finally {
       setBusyGameId(null);
       setProgressByGameId((prev) => {
@@ -323,6 +321,7 @@ export default function Games() {
           gameName: game.name,
           version: game.version,
           downloadUrl: game.downloadUrl,
+          sha256: game.sha256,
           exeRelativePath: game.exe,
           launcherName: "ZeELauncher",
         });
@@ -331,7 +330,7 @@ export default function Games() {
       await loadData();
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error ? err.message : "Erreur mise à jour globale");
+      alert(getSafeErrorMessage(err, "Impossible de mettre à jour les jeux."));
     } finally {
       setBusyGameId(null);
       setBulkUpdating(false);

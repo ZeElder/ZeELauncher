@@ -12,6 +12,7 @@ import {
   uninstallGame,
 } from "../services/launcherApi";
 import SmartCover from "../components/SmartCover";
+import { getSafeErrorMessage } from "../utils/errorMessage";
 import type { GameManifestItem } from "../types/manifest";
 import type {
   GameInstallState,
@@ -132,9 +133,7 @@ export default function GameDetails() {
       } catch (err) {
         console.error("GameDetails error:", err);
         setError(
-          err instanceof Error
-            ? err.message
-            : "Impossible de charger les données du jeu."
+          getSafeErrorMessage(err, "Impossible de charger les données du jeu.")
         );
       } finally {
         setLoading(false);
@@ -220,21 +219,14 @@ export default function GameDetails() {
         gameName: game.name,
         version: game.version,
         downloadUrl: game.downloadUrl,
+        sha256: game.sha256,
         exeRelativePath: game.exe,
         launcherName: "ZeELauncher",
       });
     } catch (err) {
       console.error("INSTALL ERROR:", err);
       setBusy(false);
-
-      const message =
-        err instanceof Error
-          ? err.message
-          : typeof err === "string"
-          ? err
-          : JSON.stringify(err, null, 2);
-
-      alert(message);
+      alert(getSafeErrorMessage(err, "Impossible d’installer le jeu."));
     }
   };
 
@@ -245,7 +237,7 @@ export default function GameDetails() {
       await reloadGame();
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error ? err.message : "Erreur désinstallation");
+      alert(getSafeErrorMessage(err, "Impossible de désinstaller le jeu."));
     } finally {
       setBusy(false);
       setInstallState(null);
@@ -259,7 +251,7 @@ export default function GameDetails() {
       await launchGame(game.id);
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error ? err.message : "Erreur lancement jeu");
+      alert(getSafeErrorMessage(err, "Impossible de lancer le jeu."));
     }
   };
 
@@ -268,7 +260,7 @@ export default function GameDetails() {
       await openGameFolder(game.id);
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error ? err.message : "Erreur ouverture dossier");
+      alert(getSafeErrorMessage(err, "Impossible d’ouvrir le dossier du jeu."));
     }
   };
 

@@ -7,6 +7,7 @@ export interface InstallGamePayload {
   gameName: string;
   version: string;
   downloadUrl: string;
+  sha256: string;
   exeRelativePath: string;
   launcherName: string;
 }

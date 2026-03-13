@@ -2,11 +2,12 @@
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     fs,
     io::{Read, Write},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     process::Command,
 };
 use tauri::{Emitter, Manager};
@@ -21,6 +22,12 @@ const PATCHNOTES_URL: &str =
     "https://raw.githubusercontent.com/ZeElder/zeelauncher-data/main/patchnotes.json";
 const NEWS_URL: &str =
     "https://raw.githubusercontent.com/ZeElder/zeelauncher-data/main/news.json";
+
+const ALLOWED_DATA_HOST: &str = "raw.githubusercontent.com";
+const ALLOWED_UPDATE_HOST: &str = "github.com";
+const ALLOWED_UPDATE_REPO_PATH: &str = "/ZeElder/ZeELauncher/";
+const ALLOWED_GAMES_REPO_PATH: &str = "/ZeElder/zeelauncher-games/";
+const ALLOWED_DATA_REPO_PATH: &str = "/ZeElder/zeelauncher-data/";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct InstalledGameEntry {
@@ -44,6 +51,7 @@ struct GameManifestItem {
     name: String,
     version: String,
     download_url: String,
+    sha256: String,
     exe: String,
     size: String,
     description: String,
@@ -126,6 +134,7 @@ struct InstallGamePayload {
     game_name: String,
     version: String,
     download_url: String,
+    sha256: String,
     exe_relative_path: String,
     launcher_name: String,
 }
@@ -180,6 +189,130 @@ fn default_user_profile() -> UserProfile {
         bio: "Joueur ZeELauncher".to_string(),
         status: "En ligne".to_string(),
     }
+}
+
+fn validate_game_id(game_id: &str) -> Result<(), String> {
+    if game_id.is_empty() {
+        return Err("game_id vide".into());
+    }
+
+    if !game_id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err("game_id invalide".into());
+    }
+
+    Ok(())
+}
+
+fn validate_relative_safe_path(path_str: &str) -> Result<(), String> {
+    let path = Path::new(path_str);
+
+    if path.is_absolute() {
+        return Err("Chemin absolu non autorisé".into());
+    }
+
+    if path
+        .components()
+        .any(|c| matches!(c, Component::ParentDir))
+    {
+        return Err("Chemin avec .. non autorisé".into());
+    }
+
+    Ok(())
+}
+
+fn validate_executable_extension(path_str: &str) -> Result<(), String> {
+    let path = Path::new(path_str);
+
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .ok_or_else(|| "Extension exécutable manquante".to_string())?;
+
+    match ext.as_str() {
+        "exe" => Ok(()),
+        _ => Err("Extension exécutable non autorisée".into()),
+    }
+}
+
+fn validate_user_profile(profile: &UserProfile) -> Result<(), String> {
+    match profile.status.as_str() {
+        "En ligne" | "Inactive" | "Hors ligne" => {}
+        _ => return Err("Statut profil invalide".into()),
+    }
+
+    if profile.username.trim().is_empty() {
+        return Err("Pseudo vide".into());
+    }
+
+    if profile.username.len() > 32 {
+        return Err("Pseudo trop long".into());
+    }
+
+    if profile.bio.len() > 500 {
+        return Err("Bio trop longue".into());
+    }
+
+    Ok(())
+}
+
+fn is_valid_sha256(value: &str) -> bool {
+    value.len() == 64 && value.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn calculate_sha256(path: &Path) -> Result<String, String> {
+    let mut file = fs::File::open(path)
+        .map_err(|e| format!("open file for sha256 failed: {e}"))?;
+
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 8192];
+
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|e| format!("read file for sha256 failed: {e}"))?;
+
+        if read == 0 {
+            break;
+        }
+
+        hasher.update(&buffer[..read]);
+    }
+
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn allowed_raw_data_url(url: &str) -> bool {
+    let Ok(parsed) = url::Url::parse(url) else {
+        return false;
+    };
+
+    parsed.scheme() == "https"
+        && parsed.host_str() == Some(ALLOWED_DATA_HOST)
+        && parsed.path().starts_with(ALLOWED_DATA_REPO_PATH)
+}
+
+fn allowed_games_download_url(url: &str) -> bool {
+    let Ok(parsed) = url::Url::parse(url) else {
+        return false;
+    };
+
+    parsed.scheme() == "https"
+        && parsed.host_str() == Some(ALLOWED_UPDATE_HOST)
+        && parsed.path().contains(ALLOWED_GAMES_REPO_PATH)
+}
+
+fn allowed_update_download_url(url: &str) -> bool {
+    let Ok(parsed) = url::Url::parse(url) else {
+        return false;
+    };
+
+    parsed.scheme() == "https"
+        && parsed.host_str() == Some(ALLOWED_UPDATE_HOST)
+        && parsed.path().contains(ALLOWED_UPDATE_REPO_PATH)
 }
 
 fn read_installed_map(app: &tauri::AppHandle) -> Result<InstalledGamesMap, String> {
@@ -296,6 +429,35 @@ fn emit_launcher_update_progress(
     .map_err(|e| format!("emit launcher_update_progress failed: {e}"))
 }
 
+fn validate_manifest_data(manifest: &ManifestData) -> Result<(), String> {
+    for game in &manifest.games {
+        validate_game_id(&game.id)?;
+        validate_relative_safe_path(&game.exe)?;
+        validate_executable_extension(&game.exe)?;
+
+        if !allowed_games_download_url(&game.download_url) {
+            return Err(format!(
+                "URL de téléchargement jeu non autorisée pour {}",
+                game.id
+            ));
+        }
+
+        if !allowed_raw_data_url(&game.cover) {
+            return Err(format!("URL de cover non autorisée pour {}", game.id));
+        }
+
+        if !is_valid_sha256(&game.sha256) {
+            return Err(format!("SHA256 invalide pour {}", game.id));
+        }
+
+        if game.name.trim().is_empty() || game.version.trim().is_empty() {
+            return Err(format!("Manifest invalide pour {}", game.id));
+        }
+    }
+
+    Ok(())
+}
+
 async fn fetch_text(url: &str) -> Result<String, String> {
     let client = reqwest::Client::new();
     let response = client
@@ -354,6 +516,10 @@ async fn download_zip(
     url: &str,
     destination: &Path,
 ) -> Result<(), String> {
+    if !allowed_games_download_url(url) {
+        return Err("Download URL non autorisée".into());
+    }
+
     let client = reqwest::Client::new();
     let response = client
         .get(url)
@@ -462,7 +628,10 @@ fn extract_zip_sync(
 
 #[tauri::command]
 async fn get_manifest(app: tauri::AppHandle) -> Result<ManifestData, String> {
-    fetch_with_cache::<ManifestData>(&app, MANIFEST_URL, "manifest.json").await
+    let manifest =
+        fetch_with_cache::<ManifestData>(&app, MANIFEST_URL, "manifest.json").await?;
+    validate_manifest_data(&manifest)?;
+    Ok(manifest)
 }
 
 #[tauri::command]
@@ -503,6 +672,8 @@ async fn get_user_profile(app: tauri::AppHandle) -> Result<UserProfile, String> 
 
 #[tauri::command]
 async fn save_user_profile(app: tauri::AppHandle, profile: UserProfile) -> Result<(), String> {
+    validate_user_profile(&profile)?;
+
     let profile_path = get_profile_json_path(&app)?;
     let tmp_path = profile_path.with_extension("json.tmp");
 
@@ -525,6 +696,18 @@ async fn list_installed(app: tauri::AppHandle) -> Result<InstalledGamesMap, Stri
 
 #[tauri::command]
 async fn install_game(app: tauri::AppHandle, payload: InstallGamePayload) -> Result<(), String> {
+    validate_game_id(&payload.game_id)?;
+    validate_relative_safe_path(&payload.exe_relative_path)?;
+    validate_executable_extension(&payload.exe_relative_path)?;
+
+    if !allowed_games_download_url(&payload.download_url) {
+        return Err("Download URL non autorisée".into());
+    }
+
+    if !is_valid_sha256(&payload.sha256) {
+        return Err("SHA256 jeu invalide".into());
+    }
+
     let game_id = payload.game_id.clone();
 
     let _ = emit_install_state(&app, &game_id, "downloading", Some("Téléchargement...".into()));
@@ -546,6 +729,12 @@ async fn install_game(app: tauri::AppHandle, payload: InstallGamePayload) -> Res
     ensure_dir(&staging_dir)?;
     download_zip(&app, &payload.game_id, &payload.download_url, &zip_path).await?;
 
+    let computed_hash = calculate_sha256(&zip_path)?;
+    if computed_hash.to_lowercase() != payload.sha256.to_lowercase() {
+        let _ = fs::remove_file(&zip_path);
+        return Err("SHA256 du ZIP invalide".into());
+    }
+
     let _ = emit_install_state(&app, &game_id, "extracting", Some("Extraction...".into()));
 
     let app_clone = app.clone();
@@ -560,6 +749,18 @@ async fn install_game(app: tauri::AppHandle, payload: InstallGamePayload) -> Res
     .map_err(|e| format!("extract task join failed: {e}"))??;
 
     if final_install_dir.exists() {
+        let games_root = get_games_dir(&app)?
+            .canonicalize()
+            .map_err(|e| format!("canonicalize games dir failed: {e}"))?;
+
+        let existing_final = final_install_dir
+            .canonicalize()
+            .map_err(|e| format!("canonicalize install dir failed: {e}"))?;
+
+        if !existing_final.starts_with(&games_root) {
+            return Err("Dossier installation hors zone autorisée".into());
+        }
+
         fs::remove_dir_all(&final_install_dir)
             .map_err(|e| format!("remove previous install dir failed: {e}"))?;
     }
@@ -582,12 +783,19 @@ async fn install_game(app: tauri::AppHandle, payload: InstallGamePayload) -> Res
     );
     write_installed_map(&app, &installed)?;
 
-    let _ = emit_install_state(&app, &game_id, "completed", Some("Installation terminée".into()));
+    let _ = emit_install_state(
+        &app,
+        &game_id,
+        "completed",
+        Some("Installation terminée".into()),
+    );
     Ok(())
 }
 
 #[tauri::command]
 async fn uninstall_game(app: tauri::AppHandle, game_id: String) -> Result<(), String> {
+    validate_game_id(&game_id)?;
+
     let mut installed = read_installed_map(&app)?;
 
     let game = installed
@@ -598,7 +806,18 @@ async fn uninstall_game(app: tauri::AppHandle, game_id: String) -> Result<(), St
     let install_dir = PathBuf::from(game.install_dir);
 
     if install_dir.exists() {
-        fs::remove_dir_all(&install_dir)
+        let games_root = get_games_dir(&app)?
+            .canonicalize()
+            .map_err(|e| format!("canonicalize games dir failed: {e}"))?;
+        let canonical_install_dir = install_dir
+            .canonicalize()
+            .map_err(|e| format!("canonicalize install dir failed: {e}"))?;
+
+        if !canonical_install_dir.starts_with(&games_root) {
+            return Err("Suppression dossier non autorisée".into());
+        }
+
+        fs::remove_dir_all(&canonical_install_dir)
             .map_err(|e| format!("remove game dir failed: {e}"))?;
     }
 
@@ -610,18 +829,37 @@ async fn uninstall_game(app: tauri::AppHandle, game_id: String) -> Result<(), St
 
 #[tauri::command]
 async fn launch_game(app: tauri::AppHandle, game_id: String) -> Result<(), String> {
+    validate_game_id(&game_id)?;
+
     let installed = get_installed_game(&app, &game_id)?;
-    let exe_path = PathBuf::from(&installed.install_dir).join(&installed.exe_relative_path);
+    validate_relative_safe_path(&installed.exe_relative_path)?;
+    validate_executable_extension(&installed.exe_relative_path)?;
+
+    let install_dir = PathBuf::from(&installed.install_dir);
+
+    let exe_relative = Path::new(&installed.exe_relative_path);
+    let exe_path = install_dir.join(exe_relative);
 
     if !exe_path.exists() {
         return Err(format!("Executable introuvable: {:?}", exe_path));
     }
 
-    let parent_dir = exe_path
+    let canonical_exe_path = exe_path
+        .canonicalize()
+        .map_err(|e| format!("canonicalize exe failed: {e}"))?;
+    let canonical_install_dir = install_dir
+        .canonicalize()
+        .map_err(|e| format!("canonicalize install dir failed: {e}"))?;
+
+    if !canonical_exe_path.starts_with(&canonical_install_dir) {
+        return Err("Executable hors du dossier jeu".into());
+    }
+
+    let parent_dir = canonical_exe_path
         .parent()
         .ok_or_else(|| "Impossible de déterminer le dossier du jeu".to_string())?;
 
-    let program = exe_path.to_string_lossy().to_string();
+    let program = canonical_exe_path.to_string_lossy().to_string();
 
     app.shell()
         .command(program)
@@ -634,6 +872,8 @@ async fn launch_game(app: tauri::AppHandle, game_id: String) -> Result<(), Strin
 
 #[tauri::command]
 async fn open_game_folder(app: tauri::AppHandle, game_id: String) -> Result<(), String> {
+    validate_game_id(&game_id)?;
+
     let installed = get_installed_game(&app, &game_id)?;
     let install_dir = PathBuf::from(&installed.install_dir);
 
@@ -641,15 +881,38 @@ async fn open_game_folder(app: tauri::AppHandle, game_id: String) -> Result<(), 
         return Err(format!("Dossier introuvable: {:?}", install_dir));
     }
 
+    let games_root = get_games_dir(&app)?
+        .canonicalize()
+        .map_err(|e| format!("canonicalize games dir failed: {e}"))?;
+    let canonical_install_dir = install_dir
+        .canonicalize()
+        .map_err(|e| format!("canonicalize install dir failed: {e}"))?;
+
+    if !canonical_install_dir.starts_with(&games_root) {
+        return Err("Ouverture dossier non autorisée".into());
+    }
+
     app.opener()
-        .reveal_item_in_dir(&install_dir)
+        .reveal_item_in_dir(&canonical_install_dir)
         .map_err(|e| format!("Impossible d'ouvrir le dossier: {e}"))?;
 
     Ok(())
 }
 
 #[tauri::command]
-async fn download_launcher_update(app: tauri::AppHandle, url: String) -> Result<(), String> {
+async fn download_launcher_update(
+    app: tauri::AppHandle,
+    url: String,
+    sha256: String,
+) -> Result<(), String> {
+    if !allowed_update_download_url(&url) {
+        return Err("URL update non autorisée".into());
+    }
+
+    if !is_valid_sha256(&sha256) {
+        return Err("SHA256 update invalide".into());
+    }
+
     let _ = emit_launcher_update_progress(&app, 0, 0, None, "downloading");
 
     let client = reqwest::Client::new();
@@ -706,6 +969,12 @@ async fn download_launcher_update(app: tauri::AppHandle, url: String) -> Result<
         .await
         .map_err(|e| format!("flush update file failed: {e}"))?;
 
+    let computed_hash = calculate_sha256(&installer_path)?;
+    if computed_hash.to_lowercase() != sha256.to_lowercase() {
+        let _ = fs::remove_file(&installer_path);
+        return Err("SHA256 update invalide".into());
+    }
+
     let _ = emit_launcher_update_progress(&app, 100, downloaded, total_size, "ready");
     Ok(())
 }
@@ -732,7 +1001,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
-	.plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             get_manifest,
             get_patch_notes,

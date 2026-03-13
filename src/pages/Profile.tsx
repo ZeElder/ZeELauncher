@@ -6,6 +6,7 @@ import {
 } from "../services/profileRemote";
 import { uploadAvatar, uploadBanner } from "../services/storage";
 import { notifyProfileUpdate } from "../stores/profileStore";
+import { getSafeErrorMessage } from "../utils/errorMessage";
 import type { UserStatus } from "../types/profile";
 
 type ProfileForm = {
@@ -68,11 +69,7 @@ export default function Profile() {
         });
       } catch (error) {
         console.error(error);
-        setMessage(
-          error instanceof Error
-            ? error.message
-            : "Impossible de charger le profil."
-        );
+        setMessage(getSafeErrorMessage(error, "Impossible de charger le profil."));
       } finally {
         setLoading(false);
       }
@@ -105,9 +102,7 @@ export default function Profile() {
       setMessage("Avatar chargé. N’oublie pas de sauvegarder.");
     } catch (error) {
       console.error(error);
-      setMessage(
-        error instanceof Error ? error.message : "Erreur upload avatar."
-      );
+      setMessage(getSafeErrorMessage(error, "Erreur upload avatar."));
     } finally {
       setUploadingAvatar(false);
     }
@@ -137,9 +132,7 @@ export default function Profile() {
       setMessage("Bannière chargée. N’oublie pas de sauvegarder.");
     } catch (error) {
       console.error(error);
-      setMessage(
-        error instanceof Error ? error.message : "Erreur upload bannière."
-      );
+      setMessage(getSafeErrorMessage(error, "Erreur upload bannière."));
     } finally {
       setUploadingBanner(false);
     }
@@ -170,16 +163,9 @@ export default function Profile() {
 
       notifyProfileUpdate(updated);
       setMessage("Profil synchronisé avec Supabase.");
-    } catch (error: any) {
+    } catch (error) {
       console.error("PROFILE SAVE ERROR:", error);
-
-      const detailedMessage =
-        error?.message ||
-        error?.error_description ||
-        error?.details ||
-        "Erreur lors de la sauvegarde.";
-
-      setMessage(detailedMessage);
+      setMessage(getSafeErrorMessage(error, "Erreur lors de la sauvegarde."));
     } finally {
       setSaving(false);
     }
