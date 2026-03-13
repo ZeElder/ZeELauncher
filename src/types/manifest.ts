@@ -7,7 +7,10 @@ export interface GameManifestItem {
   id: string;
   name: string;
   version: string;
+
   downloadUrl: string;
+  sha256: string;
+
   exe: string;
   size: string;
   description: string;
