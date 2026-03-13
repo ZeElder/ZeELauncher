@@ -271,7 +271,7 @@ export default function Profile() {
               </p>
               <h1 className="mt-2 text-4xl font-bold text-white">Mon Profil</h1>
               <p className="mt-2 text-white/60">
-                Ce profil est synchronisé avec ton compte Supabase.
+                Bienvenue sur la modification de ton profil.
               </p>
 
               <div className="mt-8 space-y-5">

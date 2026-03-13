@@ -7,6 +7,7 @@ import Home from "../pages/Home";
 import Games from "../pages/Games";
 import GameDetails from "../pages/GameDetails";
 import Profile from "../pages/Profile";
+import Support from "../pages/Support";
 import Login from "../pages/Login";
 import Register from "../pages/Register";
 
@@ -42,6 +43,10 @@ export const router = createBrowserRouter([
       {
         path: "profile",
         element: <Profile />,
+      },
+      {
+        path: "support",
+        element: <Support />,
       },
     ],
   },

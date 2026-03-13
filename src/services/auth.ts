@@ -14,6 +14,13 @@ export async function loginWithEmail(email: string, password: string) {
   });
 }
 
+export async function resendSignupConfirmation(email: string) {
+  return supabase.auth.resend({
+    type: "signup",
+    email,
+  });
+}
+
 export async function logout() {
   return supabase.auth.signOut();
 }

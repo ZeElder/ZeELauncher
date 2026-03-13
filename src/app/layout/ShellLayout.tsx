@@ -20,6 +20,8 @@ import { getFriendsList } from "../../services/friends";
 import { notifyUser } from "../../services/notifications";
 import { getMyRemoteProfile } from "../../services/profileRemote";
 import { subscribeProfile } from "../../stores/profileStore";
+import { getSafeErrorMessage } from "../../utils/errorMessage";
+import { getSupportUnreadCount } from "../../services/support";
 import type { UserStatus } from "../../types/profile";
 
 type UpdateInfo = {
@@ -32,6 +34,7 @@ type UpdateInfo = {
 type PresenceMap = Record<string, PresencePayload>;
 
 const IDLE_DELAY_MS = 5 * 60 * 1000;
+const SUPPORT_REFRESH_MS = 15000;
 
 export default function ShellLayout() {
   const [friendsOpen, setFriendsOpen] = useState(false);
@@ -50,6 +53,7 @@ export default function ShellLayout() {
   const [updateProgress, setUpdateProgress] = useState(0);
 
   const [globalToast, setGlobalToast] = useState<string | null>(null);
+  const [unreadSupportCount, setUnreadSupportCount] = useState(0);
 
   const baseAvailabilityRef = useRef<UserStatus>("En ligne");
   const idleTimeoutRef = useRef<number | null>(null);
@@ -81,6 +85,15 @@ export default function ShellLayout() {
       );
     } catch (error) {
       console.error("Friends list refresh failed:", error);
+    }
+  };
+
+  const refreshSupportCount = async () => {
+    try {
+      const count = await getSupportUnreadCount();
+      setUnreadSupportCount(count);
+    } catch (error) {
+      console.error("Support unread refresh failed:", error);
     }
   };
 
@@ -134,7 +147,7 @@ export default function ShellLayout() {
         setUpdateDownloading(true);
         setUpdateProgress(0);
 
-        await downloadLauncherUpdate(update.downloadUrl);
+        await downloadLauncherUpdate(update.downloadUrl, update.sha256);
       } catch (error) {
         console.error("Silent launcher update failed:", error);
         setUpdateDownloading(false);
@@ -294,7 +307,11 @@ export default function ShellLayout() {
     let cleanup: (() => Promise<void>) | null = null;
 
     const bootSocial = async () => {
-      await Promise.all([refreshUnreadCounts(), refreshFriendNames()]);
+      await Promise.all([
+        refreshUnreadCounts(),
+        refreshFriendNames(),
+        refreshSupportCount(),
+      ]);
 
       cleanup = await subscribeToIncomingMessages((incoming) => {
         const chatAlreadyOpen =
@@ -331,28 +348,53 @@ export default function ShellLayout() {
     };
   }, [friendsOpen, activeConversationFriendId]);
 
+  useEffect(() => {
+    void refreshSupportCount();
+
+    const intervalId = window.setInterval(() => {
+      void refreshSupportCount();
+    }, SUPPORT_REFRESH_MS);
+
+    const onFocus = () => {
+      void refreshSupportCount();
+    };
+
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+
   const handleInstallDownloadedUpdate = async () => {
     try {
       await installDownloadedLauncherUpdate();
     } catch (error) {
       console.error(error);
       alert(
-        error instanceof Error
-          ? error.message
-          : "Erreur installation mise à jour launcher"
+        getSafeErrorMessage(
+          error,
+          "Erreur installation mise à jour launcher."
+        )
       );
     }
   };
 
   return (
-    <div className="flex min-h-screen bg-black text-white">
-      <SideNav />
+    <div className="flex h-screen overflow-hidden bg-black text-white">
+      <div className="h-screen shrink-0">
+        <SideNav />
+      </div>
 
-      <div className="relative flex min-h-screen flex-1 flex-col">
-        <TopBar
-          onToggleFriends={() => setFriendsOpen(true)}
-          unreadFriendsCount={totalUnreadCount}
-        />
+      <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="shrink-0">
+          <TopBar
+            onToggleFriends={() => setFriendsOpen(true)}
+            unreadFriendsCount={totalUnreadCount}
+            unreadSupportCount={unreadSupportCount}
+          />
+        </div>
 
         {globalToast && (
           <div className="pointer-events-none fixed right-6 top-6 z-[70] max-w-[360px]">
@@ -362,7 +404,7 @@ export default function ShellLayout() {
           </div>
         )}
 
-        <main className="flex-1 p-6">
+        <main className="flex-1 overflow-y-auto p-6">
           {updateInfo && (
             <div className="mb-6 rounded-[24px] border border-amber-500/20 bg-amber-500/10 p-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -420,7 +462,8 @@ export default function ShellLayout() {
 
                   {!updateDownloading && !updateReady && !updateChecking && (
                     <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/65">
-                      Mise à jour détectée. Le téléchargement n’a pas pu être finalisé automatiquement.
+                      Mise à jour détectée. Le téléchargement n’a pas pu être
+                      finalisé automatiquement.
                     </div>
                   )}
                 </div>

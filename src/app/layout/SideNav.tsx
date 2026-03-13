@@ -7,6 +7,8 @@ import { subscribeProfile } from "../../stores/profileStore";
 import type { GameManifestItem } from "../../types/manifest";
 import type { UserStatus } from "../../types/profile";
 
+import logo from "../../assets/icon.png";
+
 type SidebarProfile = {
   username: string;
   tag: string;
@@ -89,16 +91,29 @@ export default function SideNav() {
 
   return (
     <aside className="flex h-screen w-72 flex-col border-r border-white/8 bg-[#0d1218]/95 px-4 py-5 backdrop-blur-xl">
-      <div className="mb-6 rounded-3xl border border-white/8 bg-white/5 p-5 shadow-[0_12px_40px_rgba(0,0,0,0.28)]">
-        <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/20 text-lg font-bold text-blue-300">
-            Z
+      <div className="mb-6 rounded-[28px] border border-white/10 bg-gradient-to-b from-white/8 to-white/[0.03] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.28)]">
+        <div className="flex items-center gap-4">
+          <div className="group relative flex h-14 w-14 items-center justify-center">
+            <div className="absolute inset-0 rounded-full bg-blue-500/20 blur-xl opacity-70 transition duration-300 group-hover:opacity-100" />
+            <div className="absolute inset-0 rounded-full border border-cyan-300/15 bg-gradient-to-br from-cyan-400/10 via-blue-500/10 to-transparent" />
+
+            <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-[#111821] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition duration-300 group-hover:scale-105">
+              <img
+                src={logo}
+                alt="ZeeLauncher"
+                className="h-15 w-15 rounded-full object-contain"
+                draggable={false}
+              />
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold tracking-wide text-white">
+
+          <div className="min-w-0">
+            <h1 className="truncate text-[1.15rem] font-bold tracking-[0.01em] text-white">
               ZeeLauncher
             </h1>
-            <p className="text-xs text-white/40">Riot × Steam style</p>
+            <p className="mt-0.5 text-xs text-white/45">
+              Created by ZeElder
+            </p>
           </div>
         </div>
       </div>

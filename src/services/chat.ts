@@ -28,6 +28,96 @@ export interface ConversationSidebarItem {
 type PresenceMap = Record<string, PresencePayload>;
 type SidebarMap = Record<string, ConversationSidebarItem>;
 
+const BANNED_WORDS = [
+  "hitler",
+  "heil",
+  "heil hitler",
+  "white power",
+  "sieg heil",
+  "nigger",
+  "nigga",
+  "kike",
+  "spic",
+  "chink",
+  "gook",
+  "wetback",
+  "raghead",
+  "coon",
+  "gas the jews",
+  "dirty jew",
+  "jewboy",
+  "faggot",
+  "fag",
+  "dyke",
+  "tranny",
+  "motherfucker",
+  "dumbfuck",
+  "piece of shit",
+  "son of a bitch",
+  "sale pute",
+  "fils de pute",
+  "salope",
+  "pute",
+  "kkk",
+  "ku klux klan",
+  "blood and soil",
+];
+
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[@4]/g, "a")
+    .replace(/[3]/g, "e")
+    .replace(/[1!|]/g, "i")
+    .replace(/[0]/g, "o")
+    .replace(/[5$]/g, "s")
+    .replace(/[7]/g, "t")
+    .replace(/[9]/g, "g")
+    .replace(/[€]/g, "e")
+    .replace(/[+]/g, "t");
+}
+
+function removeSeparators(text: string): string {
+  return text.replace(/[\s._\-~`'"*^]/g, "");
+}
+
+function collapseRepeats(text: string): string {
+  return text.replace(/(.)\1{2,}/g, "$1");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildLoosePattern(word: string): RegExp {
+  const normalized = normalizeText(word).replace(/\s+/g, "");
+  const chars = normalized.split("").map(escapeRegExp);
+  return new RegExp(chars.join("[\\s\\W_]*"), "gi");
+}
+
+const BANNED_PATTERNS = BANNED_WORDS.map((word) => ({
+  normalized: normalizeText(word),
+  compact: removeSeparators(normalizeText(word)),
+  loose: buildLoosePattern(word),
+}));
+
+function censorText(text: string): string {
+  const normalized = collapseRepeats(normalizeText(text));
+  const compact = removeSeparators(normalized);
+
+  let result = text;
+
+  for (const pattern of BANNED_PATTERNS) {
+    if (normalized.includes(pattern.normalized) || compact.includes(pattern.compact)) {
+      result = result.replace(pattern.loose, "***");
+    }
+  }
+
+  return result;
+}
+
 function getRoomId(a: string, b: string) {
   return ["chat", ...[a, b].sort()].join(":");
 }
@@ -80,12 +170,14 @@ export async function sendMessage(
     throw new Error("Message vide.");
   }
 
+  const cleanContent = censorText(trimmed);
+
   const { data, error } = await supabase
     .from("messages")
     .insert({
       sender_id: me.id,
       receiver_id: receiverId,
-      content: trimmed,
+      content: cleanContent,
     })
     .select()
     .single();

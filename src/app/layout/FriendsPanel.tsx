@@ -41,6 +41,7 @@ type FriendLike = {
 };
 
 const EMOJIS = ["😀", "😂", "😎", "🥶", "😭", "❤️", "🔥", "🎮", "👀", "👍", "🚀", "💀"];
+const URL_REGEX = /(https?:\/\/[^\s<>"{}|\\^`\[\]]+)/gi;
 
 function getStatusDotClass(status: UserStatus) {
   switch (status) {
@@ -83,6 +84,30 @@ function formatPreview(meta?: ConversationSidebarItem) {
   return `${prefix}${meta.lastMessage}`;
 }
 
+function renderMessageContent(
+  text: string,
+  onLinkClick: (url: string) => void
+) {
+  const parts = text.split(URL_REGEX);
+
+  return parts.map((part, i) => {
+    if (/^https?:\/\/[^\s<>"{}|\\^`\[\]]+$/i.test(part)) {
+      return (
+        <button
+          key={i}
+          type="button"
+          onClick={() => onLinkClick(part)}
+          className="break-all text-blue-300 underline hover:text-blue-200"
+        >
+          {part}
+        </button>
+      );
+    }
+
+    return <span key={i}>{part}</span>;
+  });
+}
+
 export default function FriendsPanel({
   open,
   onClose,
@@ -105,6 +130,7 @@ export default function FriendsPanel({
   const [sidebarState, setSidebarState] = useState<
     Record<string, ConversationSidebarItem>
   >({});
+  const [linkToOpen, setLinkToOpen] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<number | null>(null);
@@ -452,6 +478,32 @@ export default function FriendsPanel({
     }
   };
 
+  const handleLinkClick = (url: string) => {
+    setLinkToOpen(url);
+  };
+
+  const confirmOpenLink = () => {
+    if (!linkToOpen) return;
+
+    try {
+      const safeUrl = new URL(linkToOpen);
+
+      const anchor = document.createElement("a");
+      anchor.href = safeUrl.toString();
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      anchor.style.display = "none";
+
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+    } catch (error) {
+      console.error("Lien invalide :", error);
+    } finally {
+      setLinkToOpen(null);
+    }
+  };
+
   const renderFriendItem = (
     friend: FriendLike & {
       liveStatus: UserStatus;
@@ -725,7 +777,7 @@ export default function FriendsPanel({
                         ].join(" ")}
                       >
                         <p className="whitespace-pre-wrap break-words">
-                          {msg.content}
+                          {renderMessageContent(msg.content, handleLinkClick)}
                         </p>
                         <p className="mt-1 text-[10px] opacity-60">
                           {new Date(msg.created_at).toLocaleString()}
@@ -791,6 +843,45 @@ export default function FriendsPanel({
           </div>
         </div>
       </div>
+
+      {linkToOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70">
+          <div className="w-[420px] rounded-2xl border border-white/10 bg-[#141b23] p-6 text-center shadow-[0_18px_50px_rgba(0,0,0,0.45)]">
+            <h3 className="text-lg font-bold text-white">
+              Attention aux liens externes
+            </h3>
+
+            <p className="mt-3 break-all text-sm text-white/60">
+              Tu vas ouvrir :
+            </p>
+
+            <p className="mt-2 break-all text-sm text-blue-300">
+              {linkToOpen}
+            </p>
+
+            <p className="mt-3 text-xs text-white/40">
+              Fais attention aux liens que tu cliques. Assure-toi de faire
+              confiance à la source avant de continuer.
+            </p>
+
+            <div className="mt-5 flex justify-center gap-3">
+              <button
+                onClick={() => setLinkToOpen(null)}
+                className="rounded-xl bg-white/10 px-4 py-2 text-white/70 transition hover:bg-white/20"
+              >
+                Annuler
+              </button>
+
+              <button
+                onClick={confirmOpenLink}
+                className="rounded-xl bg-blue-500 px-4 py-2 font-semibold text-white transition hover:bg-blue-400"
+              >
+                Ouvrir le lien
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

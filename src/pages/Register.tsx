@@ -5,16 +5,20 @@ import { createProfileIfMissing } from "../services/profileRemote";
 
 export default function Register() {
   const navigate = useNavigate();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   const handleRegister = async () => {
     try {
       setLoading(true);
       setMessage(null);
+      setSuccess(false);
 
       if (!email.trim()) {
         throw new Error("Adresse mail requise.");
@@ -28,22 +32,18 @@ export default function Register() {
         throw new Error("Les mots de passe ne correspondent pas.");
       }
 
-      const { data, error } = await registerWithEmail(email, password);
-
-      console.log("REGISTER DATA:", data);
-      console.log("REGISTER ERROR:", error);
+      const { data, error } = await registerWithEmail(email.trim(), password);
 
       if (error) {
         throw error;
       }
 
       if (!data.user) {
-        throw new Error("Compte créé, mais utilisateur introuvable.");
+        throw new Error("Compte créé mais utilisateur introuvable.");
       }
 
-      // Si la confirmation email est activée, il peut ne pas y avoir de session.
-      // Dans ce cas, on évite de créer le profil maintenant.
       if (!data.session) {
+        setSuccess(true);
         setMessage(
           "Compte créé. Vérifie ton email pour confirmer ton inscription, puis connecte-toi."
         );
@@ -57,13 +57,15 @@ export default function Register() {
 
       navigate("/");
     } catch (error) {
-      console.error("REGISTER PAGE ERROR:", error);
+      console.error("REGISTER ERROR:", error);
 
       if (error instanceof Error) {
         setMessage(error.message);
       } else {
-        setMessage("Erreur inconnue pendant l’inscription.");
+        setMessage("Erreur inconnue pendant l'inscription.");
       }
+
+      setSuccess(false);
     } finally {
       setLoading(false);
     }
@@ -75,7 +77,11 @@ export default function Register() {
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-white/30">
           Compte
         </p>
-        <h1 className="mt-2 text-3xl font-bold text-white">Créer un compte</h1>
+
+        <h1 className="mt-2 text-3xl font-bold text-white">
+          Créer un compte
+        </h1>
+
         <p className="mt-2 text-sm text-white/60">
           Rejoins ZeELauncher avec ton adresse mail.
         </p>
@@ -112,7 +118,11 @@ export default function Register() {
             {loading ? "Création..." : "Créer mon compte"}
           </button>
 
-          {message && <p className="text-sm text-red-300">{message}</p>}
+          {message && (
+            <p className={`text-sm ${success ? "text-green-300" : "text-red-300"}`}>
+              {message}
+            </p>
+          )}
 
           <p className="text-sm text-white/60">
             Déjà un compte ?{" "}
